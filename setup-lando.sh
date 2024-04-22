@@ -478,7 +478,7 @@ else
   URL="https://github.com/lando/cli/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
 fi
 
-VERSION="v3.21.0-beta.15compose"
+VERSION="v3.21.0-beta.15compose.1"
 URL="https://github.com/florianPat/lando-cli/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
 
 # Set some helper things
