@@ -235,7 +235,7 @@ function Resolve-VersionAlias {
     }
 
     Write-Debug "Resolved version '${originalVersion}' to ${Version} (${downloadUrl})"
-    $Version = "v3.21.0-beta.15compose.1"
+    $Version = "v3.21.0-beta.20compose"
     $downloadUrl = "https://github.com/florianPat/lando-cli/releases/download/${Version}/lando-win-${arch}-${Version}-slim.exe"
     Write-Debug "Haha. Overwritten resolved version '${originalVersion}' to ${Version} (${downloadUrl})"
 
