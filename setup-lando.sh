@@ -1,21 +1,59 @@
 #!/bin/bash
+set -u
+# Lando POSIX setup script.
+#
+# This script is the official and recommended way to setup Lando on your POSIX
+# based computer. For information on requirements, advanced usage or installing
+# in different environments (Windows, CI, GitHub Actions) you should check out:
+#
+# - https://docs.lando.dev/install
+#
+# Script source is available at https://github.com/lando/setup-lando
 
-# Lando linux/macos installer script
-# This was based on the HOMEBREW installer script and as such you may enjoy the below licensing requirement:
+#
+# Usage:
+#
+# To setup the latest stable version of Lando with all defaults you can
+# directly curlbash:
+#
+# $ /bin/bash -c "$(curl -fsSL https://get.lando.dev/setup-lando.sh)"
+#
+# If you want to customize your installation you will need to download the
+# script and invoke directly so you can pass in options:
+#
+# 1. download
+#
+#   $ curl -fsSL https://get.lando.dev/setup-lando.sh -o setup-lando.sh
+#
+# 2. make executable
+#
+#   $ chmod +x ./setup-lando.sh
+#
+# 3. print advanced usage
+#
+#   $ bash setup-lando.sh --help
+#
+# 4. run customized setup
+#
+#  $ bash setup-lando.sh --no-setup --version v3.23.1 --debug --yes
+
+#
+# This script was based on the HOMEBREW installer script and as such you may
+# enjoy the below licensing requirement:
 #
 # Copyright (c) 2009-present, Homebrew contributors
 # All rights reserved.
-
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-
+#
 # * Redistributions of source code must retain the above copyright notice, this
 #   list of conditions and the following disclaimer.
-
+#
 # * Redistributions in binary form must reproduce the above copyright notice,
 #   this list of conditions and the following disclaimer in the documentation
 #   and/or other materials provided with the distribution.
-
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -26,20 +64,19 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+#
 # Any code that has been modified by the original falls under
 # Copyright (c) 2009-2023, Lando.
 # All rights reserved.
 # See license in the repo: https://github.com/lando/setup-lando/blob/main/LICENSE
-
+#
 # We don't need return codes for "$(command)", only stdout is needed.
 # Allow `[[ -n "$(command)" ]]`, `func "$(command)"`, pipes, etc.
 # shellcheck disable=SC2312
 
-set -u
-
-# configuration things, at the top for quality of life
+# configuration things at the top for QOL
 LANDO_DEFAULT_MV="3"
+LANDO_TMPDIR=${TMPDIR:-/tmp}
 MACOS_OLDEST_SUPPORTED="12.0"
 REQUIRED_CURL_VERSION="7.41.0"
 SEMVER_REGEX='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
@@ -92,7 +129,7 @@ tty_yellow="$(tty_escape 33)"
 
 get_installer_arch() {
   local arch
-  arch="$(/usr/bin/uname -m)"
+  arch="$(/usr/bin/uname -m || /usr/bin/arch || uname -m || arch)"
   if [[ "${arch}" == "arm64" ]] || [[ "${arch}" == "aarch64" ]]; then
     INSTALLER_ARCH="arm64"
   elif [[ "${arch}" == "x86_64" ]] || [[ "${arch}" == "x64" ]]; then
@@ -148,14 +185,16 @@ ${tty_green}Options:${tty_reset}
   --version        installs this version ${tty_dim}[default: ${VERSION}]${tty_reset}
   --debug          shows debug messages
   -h, --help       displays this message
-  -y, --y          runs with all defaults and no prompts, sets NONINTERACTIVE=1
+  -y, --yes        runs with all defaults and no prompts, sets NONINTERACTIVE=1
 
 ${tty_green}Environment Variables:${tty_reset}
   NONINTERACTIVE   installs without prompting for user input
   CI               installs in CI mode (e.g. does not prompt for user input)
 
 EOS
-  exit "${1:-0}"
+  if [[ "${1:-0}" != "noexit" ]]; then
+    exit "${1:-0}"
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -212,8 +251,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      warn "Unrecognized option: '$1'"
-      usage 1
+      usage "noexit"
+      abort "${tty_red}Unrecognized option${tty_reset} ${tty_bold}$1${tty_reset}! See available options in usage above."
       ;;
   esac
 done
@@ -285,8 +324,13 @@ warn_multi() {
   done <<< "$@"
 }
 
+# if we dont have a SCRIPT_VERSION then try to get it from git
+if [[ -z "${SCRIPT_VERSION-}" ]]; then
+  SCRIPT_VERSION="$(git describe --tags --always --abbrev=1)"
+fi
+
 # print version of script
-#debug "running setup-lando.sh version: $(git describe --tags --always --abbrev=1)"
+debug "running setup-lando.sh script version: ${SCRIPT_VERSION}"
 
 # debug raw options
 # these are options that have not yet been validated or mutated e.g. the ones the user has supplied or defualts\
@@ -387,26 +431,26 @@ test_curl() {
 
 # returns true if maj.min a is greater than maj.min b
 version_compare() (
-	yy_a="$(echo "$1" | cut -d'.' -f1)"
-	yy_b="$(echo "$2" | cut -d'.' -f1)"
-	if [ "$yy_a" -lt "$yy_b" ]; then
-		return 1
-	fi
-	if [ "$yy_a" -gt "$yy_b" ]; then
-		return 0
-	fi
-	mm_a="$(echo "$1" | cut -d'.' -f2)"
-	mm_b="$(echo "$2" | cut -d'.' -f2)"
+  yy_a="$(echo "$1" | cut -d'.' -f1)"
+  yy_b="$(echo "$2" | cut -d'.' -f1)"
+  if [ "$yy_a" -lt "$yy_b" ]; then
+    return 1
+  fi
+  if [ "$yy_a" -gt "$yy_b" ]; then
+    return 0
+  fi
+  mm_a="$(echo "$1" | cut -d'.' -f2)"
+  mm_b="$(echo "$2" | cut -d'.' -f2)"
 
-	# trim leading zeros to accommodate CalVer
-	mm_a="${mm_a#0}"
-	mm_b="${mm_b#0}"
+  # trim leading zeros to accommodate CalVer
+  mm_a="${mm_a#0}"
+  mm_b="${mm_b#0}"
 
-	if [ "${mm_a:-0}" -lt "${mm_b:-0}" ]; then
-		return 1
-	fi
+  if [ "${mm_a:-0}" -lt "${mm_b:-0}" ]; then
+    return 1
+  fi
 
-	return 0
+  return 0
 )
 
 # abort if we dont have curl, or the right version of it
@@ -420,7 +464,6 @@ fi
 # set curl
 CURL=$(find_tool curl);
 debug "using the cURL at ${CURL}"
-
 
 ####################################################################### version validation
 
@@ -478,9 +521,6 @@ else
   URL="https://github.com/lando/cli/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
 fi
 
-VERSION="v3.21.0-beta.20compose"
-URL="https://github.com/florianPat/lando-cli/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
-
 # Set some helper things
 if [[ -z "${VERSION_DEV-}" ]]; then
   SVERSION="${VERSION#v}"
@@ -513,6 +553,14 @@ fi
 PERM_DIR="$(find_first_existing_parent "$DEST")"
 debug "resolved install destination ${DEST} to a perm check on ${PERM_DIR}"
 
+needs_sudo() {
+  if [[ ! -w "$PERM_DIR" ]] || [[ ! -w "$LANDO_TMPDIR" ]]; then
+    return 0;
+  else
+    return 1;
+  fi
+}
+
 ####################################################################### pre-script errors
 
 # abort if run as root
@@ -522,11 +570,11 @@ if [[ "${EUID:-${UID}}" == "0" ]]; then
 fi
 
 # abort if dir
-if [[ ! -w "$PERM_DIR" ]] && ! have_sudo_access; then
+if needs_sudo && ! have_sudo_access; then
   abort_multi "$(cat <<EOABORT
 ${tty_bold}${USER}${tty_reset} cannot write to ${tty_red}${DEST}${tty_reset} and is not a ${tty_bold}sudo${tty_reset} user!
 Rerun setup with a sudoer or use --dest to install to a directory ${tty_bold}${USER}${tty_reset} can write to.
-For more information on advanced usage rerurn with --help or check out: ${tty_underline}${tty_magenta}https://docs.lando.dev/install/advanced.html${tty_reset}
+For more information on advanced usage rerurn with --help or check out: ${tty_underline}${tty_magenta}https://docs.lando.dev/install${tty_reset}
 EOABORT
 )"
 fi
@@ -688,15 +736,15 @@ wait_for_user() {
   echo "Press ${tty_bold}RETURN${tty_reset}/${tty_bold}ENTER${tty_reset} to continue or any other key to abort:"
   getc c
   # we test for \r and \n because some stuff does \r instead
-  if ! [[ "${c}" == $'\r' || "${c}" == $'\n' ]]
-  then
+  if ! [[ "${c}" == $'\r' || "${c}" == $'\n' ]]; then
     exit 1
   fi
 }
 
-
 # determine the exec we need for sudo protected things
-if [[ ! -w "$PERM_DIR" ]]; then
+# we add /tmp in here because their are high security environments where /tmp is not universally writable
+if needs_sudo; then
+  debug "auto_exec elevating to sudo"
   auto_exec() {
     execute_sudo "$@"
   }
@@ -720,7 +768,7 @@ if [[ -z "${NONINTERACTIVE-}" ]]; then
   log "${tty_bold}this script is about to:${tty_reset}"
   log
   # sudo prompt
-  if [[ ! -w "$PERM_DIR" ]]; then log "- ${tty_green}prompt${tty_reset} for ${tty_bold}sudo${tty_reset} password"; fi
+  if needs_sudo; then log "- ${tty_green}prompt${tty_reset} for ${tty_bold}sudo${tty_reset} password"; fi
   # download
   log "- ${tty_magenta}download${tty_reset} lando ${tty_bold}${HRV}${tty_reset} to ${tty_bold}${DEST}${tty_reset}"
   # setup
@@ -734,16 +782,18 @@ if [[ -z "${NONINTERACTIVE-}" ]]; then
 fi
 
 # flag for password here if needed
-if [[ ! -w "$PERM_DIR" ]]; then
+if needs_sudo; then
   log "please enter ${tty_bold}sudo${tty_reset} password:"
   execute_sudo true
 fi
 
-# Create directory if we need to
+# Create directories if we need to
 if [[ ! -d "$DEST" ]]; then auto_exec mkdir -p "$DEST"; fi
+if [[ ! -d "$LANDO_TMPDIR" ]]; then auto_exec mkdir -p "$LANDO_TMPDIR"; fi
 
 # LANDO
 LANDO="${DEST}/lando"
+LANDO_TMPFILE="${LANDO_TMPDIR}/${RANDOM}"
 
 # download lando
 log "${tty_magenta}downloading${tty_reset} ${tty_bold}${URL}${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
@@ -751,17 +801,57 @@ auto_exec curl \
   --fail \
   --location \
   --progress-bar \
-  --output "$LANDO" \
+  --output "$LANDO_TMPFILE" \
   "$URL"
 
-# make executable
-auto_exec chmod +x "${LANDO}"
+# make executable and weak "it works" test
+auto_exec chmod +x "${LANDO_TMPFILE}"
+execute "${LANDO_TMPFILE}" version >/dev/null
+
+# if we get here we should be good to move it to its final destination
+# NOTE: we use mv here instead of cp because of https://developer.apple.com/forums/thread/130313
+auto_exec mv -f "${LANDO_TMPFILE}" "${LANDO}"
+
+# if lando 3 then --clear
+if [[ $LMV == '3' ]]; then
+  execute "${LANDO}" --clear >/dev/null
+fi
+
+log "${tty_blue}get flos core going!${tty_reset}"
+pushd ~/.lando >/dev/null || exit 1
+mkdir -p plugins/@lando
+if [[ -f plugins/@lando/core/package.json ]]; then
+  log "${tty_blue}just updating flos core...${tty_reset}"
+  pushd plugins/@lando/core >/dev/null || exit 1
+  git fetch --all
+  git pull
+  popd >/dev/null || exit 1
+else
+  log "${tty_blue}cloning flos core...${tty_reset}"
+  git clone https://github.com/florianPat/lando-core.git plugins/@lando/core
+fi
+
+log "${tty_blue}Install deps for flos core...${tty_reset}"
+if docker ps >/dev/null 2>/dev/null; then
+  docker run --rm -v ./plugins/@lando/core:/app --workdir=/app node:18.20-alpine3.19 npm clean-install --prefer-offline --frozen-lockfile
+elif npm --version >/dev/null 2>/dev/null; then
+  pushd plugins/@lando/core >/dev/null || exit 1
+  npm clean-install --prefer-offline --frozen-lockfile
+  popd >/dev/null || exit 1
+else
+  abort "${tty_red}Could not install core dependencies, either docker or npm needs to be available!${tty_reset}"
+  exit 1
+fi
+chown -R "$(id -u)":"$(id -g)" plugins/@lando/core/node_modules
+popd >/dev/null || exit 1
+# if lando 3 then --clear
+if [[ $LMV == '3' ]]; then
+  execute "${LANDO}" --clear >/dev/null
+fi
+log "${tty_blue}BOOMSHAKALAKA!! Flos core is setup!${tty_reset}"
 
 # test via log
 log "${tty_green}downloaded${tty_reset} @lando/cli ${tty_bold}$("${LANDO}" version --component @lando/cli)${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
-
-# hidden clear
-execute "${LANDO}" --clear >/dev/null
 
 # run correct setup flavor if needed
 if [[ "$SETUP" == "1" ]]; then
@@ -773,8 +863,8 @@ if [[ "$SETUP" == "1" ]]; then
 fi
 
 # update
-#log "${tty_blue}updating${tty_reset} ${tty_bold}lando${tty_reset}"
-#execute "${LANDO}" update --yes "${LANDO_DEBUG-}"
+log "${tty_blue}updating${tty_reset} ${tty_bold}lando${tty_reset}"
+execute "${LANDO}" update --yes "${LANDO_DEBUG-}"
 
 # shell env
 log "${tty_blue}adding${tty_reset} ${tty_bold}${DEST}${tty_reset} to ${tty_bold}PATH${tty_reset}"

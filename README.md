@@ -4,19 +4,18 @@ This repo is the single source of truth for all things relating to the installat
 
 This currently includes:
 
-* Windows/WSL2 setup scripts
-* POSIX setup scripts
+* WSL2/POSIX setup scripts
 * Install docs
 
 ## Ok great, how do I get going now??
 
-### macOS/linux
+### macOS/linux/wsl2
 
 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-lando.sh)"`
 
-### Windows
+### If I type in ```lando update``` one cannot update the core as it is "installed from source"
 
-`& ([ScriptBlock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-lando.ps1)))`
+Just run `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/update-flos-core.sh)"`
 
 ## Maintainers
 
