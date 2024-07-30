@@ -29,15 +29,15 @@ shell_join() {
   done
 }
 
-log "${tty_blue}get flos core going!${tty_reset}"
+log "${tty_blue}get flos core up to date!${tty_reset}"
 if [[ -f ~/.lando/plugins/@lando/core/package.json ]]; then
-  pushd ~/.lando/plugins/@lando/core >/dev/null || exit 1
+  pushd ~/.lando >/dev/null || exit 1
   log "${tty_blue}just updating flos core...${tty_reset}"
-  git fetch --all
-  git pull
-  log "${tty_blue}Install deps for flos core...${tty_reset}"
-  docker run --rm -v .:/app --workdir=/app node:18.20-alpine3.19 npm clean-install --prefer-offline --frozen-lockfile
-  chown -R "$(id -u)":"$(id -g)" node_modules
+  curl -fsSL https://github.com/florianPat/lando-core/releases/latest/download/flos-lando-core.tgz -o ./flos-lando-core.tgz
+  tar -xzf flos-lando-core.tgz
+  rm flos-lando-core.tgz
+  rm -rf plugins/@lando/core
+  mv package plugins/@lando/core
   popd >/dev/null || exit 1
 
   lando --clear

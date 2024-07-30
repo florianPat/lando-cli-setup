@@ -822,27 +822,16 @@ pushd ~/.lando >/dev/null || exit 1
 mkdir -p plugins/@lando
 if [[ -f plugins/@lando/core/package.json ]]; then
   log "${tty_blue}just updating flos core...${tty_reset}"
-  pushd plugins/@lando/core >/dev/null || exit 1
-  git fetch --all
-  git pull
-  popd >/dev/null || exit 1
+  rm -rf plugins/@lando/core
 else
   log "${tty_blue}cloning flos core...${tty_reset}"
-  git clone https://github.com/florianPat/lando-core.git plugins/@lando/core
 fi
 
-log "${tty_blue}Install deps for flos core...${tty_reset}"
-if docker ps >/dev/null 2>/dev/null; then
-  docker run --rm -v ./plugins/@lando/core:/app --workdir=/app node:18.20-alpine3.19 npm clean-install --prefer-offline --frozen-lockfile
-elif npm --version >/dev/null 2>/dev/null; then
-  pushd plugins/@lando/core >/dev/null || exit 1
-  npm clean-install --prefer-offline --frozen-lockfile
-  popd >/dev/null || exit 1
-else
-  abort "${tty_red}Could not install core dependencies, either docker or npm needs to be available!${tty_reset}"
-  exit 1
-fi
-chown -R "$(id -u)":"$(id -g)" plugins/@lando/core/node_modules
+curl -fsSL https://github.com/florianPat/lando-core/releases/latest/download/flos-lando-core.tgz -o ./flos-lando-core.tgz
+tar -xzf flos-lando-core.tgz
+rm flos-lando-core.tgz
+mv package plugins/@lando/core
+
 popd >/dev/null || exit 1
 # if lando 3 then --clear
 if [[ $LMV == '3' ]]; then
@@ -860,6 +849,11 @@ if [[ "$SETUP" == "1" ]]; then
   else
     execute "${LANDO}" setup "${LANDO_DEBUG-}"
   fi
+fi
+
+if [[ -n "${CI-}" ]]; then
+  log "${tty_green}success!${tty_reset} ${tty_bold}lando${tty_reset} is now installed in your CI!"
+  exit 0
 fi
 
 # update
