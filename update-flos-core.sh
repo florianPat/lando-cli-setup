@@ -41,6 +41,7 @@ if [[ -f ~/.lando/plugins/@lando/core/package.json ]]; then
   popd >/dev/null || exit 1
 
   lando --clear
+  lando setup
   log "${tty_blue}BOOMSHAKALAKA!! Flos core is setup!${tty_reset}"
 else
   log "${tty_blue}You do not have flos core yet :/ Please use the setup script first!${tty_reset}"
