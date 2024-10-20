@@ -31,6 +31,8 @@ shell_join() {
 
 log "${tty_blue}get flos core up to date!${tty_reset}"
 if [[ -f ~/.lando/plugins/@lando/core/package.json ]]; then
+  lando update --yes
+
   pushd ~/.lando >/dev/null || exit 1
   log "${tty_blue}just updating flos core...${tty_reset}"
   curl -fsSL https://github.com/florianPat/lando-core/releases/latest/download/flos-lando-core.tgz -o ./flos-lando-core.tgz
