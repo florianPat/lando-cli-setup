@@ -324,14 +324,6 @@ warn_multi() {
   done <<< "$@"
 }
 
-# if we dont have a SCRIPT_VERSION then try to get it from git
-if [[ -z "${SCRIPT_VERSION-}" ]]; then
-  SCRIPT_VERSION="$(git describe --tags --always --abbrev=1)"
-fi
-
-# print version of script
-debug "running setup-lando.sh script version: ${SCRIPT_VERSION}"
-
 # debug raw options
 # these are options that have not yet been validated or mutated e.g. the ones the user has supplied or defualts\
 debug "raw args setup-lando.sh $ORIGOPTS"
@@ -816,21 +808,13 @@ if [[ $LMV == '3' ]]; then
 fi
 
 log "${tty_blue}get flos core going!${tty_reset}"
-pushd ~/.lando >/dev/null || exit 1
-mkdir -p plugins/@lando
-if [[ -f plugins/@lando/core/package.json ]]; then
-  log "${tty_blue}just updating flos core...${tty_reset}"
-  rm -rf plugins/@lando/core
-else
-  log "${tty_blue}cloning flos core...${tty_reset}"
+
+execute mkdir -p ~/.lando/plugins/@lando
+execute rm -rf ~/.lando/plugins/@lando/core
+execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}-compose"
+if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
+  execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
 fi
-
-curl -fsSL https://github.com/florianPat/lando-core/releases/latest/download/flos-lando-core.tgz -o ./flos-lando-core.tgz
-tar -xzf flos-lando-core.tgz
-rm flos-lando-core.tgz
-mv package plugins/@lando/core
-
-popd >/dev/null || exit 1
 # if lando 3 then --clear
 if [[ $LMV == '3' ]]; then
   execute "${LANDO}" --clear >/dev/null

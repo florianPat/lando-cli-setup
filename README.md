@@ -13,10 +13,6 @@ This currently includes:
 
 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-lando.sh)"`
 
-### If I type in ```lando update``` one cannot update the core as it is "installed from source"
-
-Just run `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/update-flos-core.sh)"`
-
 ### If the "*.lndo.site" domains do not resolve (e.g. due to fritzbox rebind protection), install dnsmasq:
 
 Just run `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-dnsmasq-mac.sh)"`
