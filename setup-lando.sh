@@ -169,7 +169,7 @@ FAT="${LANDO_INSTALLER_FAT:-0}"
 OS="${LANDO_INSTALLER_OS:-"$INSTALLER_OS"}"
 SUDO="${LANDO_INSTALLER_SUDO:-1}"
 SETUP="${LANDO_INSTALLER_SETUP:-1}"
-VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-stable}}"
+VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.3}}"
 ORIGOPTS="$*"
 
 usage() {
@@ -794,6 +794,10 @@ auto_exec curl \
   --output "$LANDO_TMPFILE" \
   "$URL"
 
+execute rm -rf ~/.lando/plugins/@lando/core
+execute rm -rf ~/.lando/cache
+execute rm -rf ~/.lando/bin
+
 # make executable and weak "it works" test
 auto_exec chmod +x "${LANDO_TMPFILE}"
 execute "${LANDO_TMPFILE}" version >/dev/null
@@ -810,7 +814,6 @@ fi
 log "${tty_blue}get flos core going!${tty_reset}"
 
 execute mkdir -p ~/.lando/plugins/@lando
-execute rm -rf ~/.lando/plugins/@lando/core
 execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}-compose"
 if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
   execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
