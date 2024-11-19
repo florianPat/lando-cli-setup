@@ -830,9 +830,9 @@ log "${tty_green}downloaded${tty_reset} @lando/cli ${tty_bold}$("${LANDO}" versi
 # run correct setup flavor if needed
 if [[ "$SETUP" == "1" ]]; then
   if [[ "${NONINTERACTIVE-}" == "1" ]]; then
-    execute "${LANDO}" setup --yes "${LANDO_DEBUG-}"
+    execute "${LANDO}" setup --skip-common-plugins --yes "${LANDO_DEBUG-}"
   else
-    execute "${LANDO}" setup "${LANDO_DEBUG-}"
+    execute "${LANDO}" setup --skip-common-plugins "${LANDO_DEBUG-}"
   fi
 fi
 
