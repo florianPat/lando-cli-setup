@@ -814,7 +814,7 @@ fi
 log "${tty_blue}get flos core going!${tty_reset}"
 
 execute mkdir -p ~/.lando/plugins/@lando
-execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}-test1"
+execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}-test2"
 if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
   execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
 fi
