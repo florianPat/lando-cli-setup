@@ -169,7 +169,7 @@ FAT="${LANDO_INSTALLER_FAT:-0}"
 OS="${LANDO_INSTALLER_OS:-"$INSTALLER_OS"}"
 SUDO="${LANDO_INSTALLER_SUDO:-1}"
 SETUP="${LANDO_INSTALLER_SETUP:-1}"
-VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.7}}"
+VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.22}}"
 ORIGOPTS="$*"
 
 usage() {
@@ -814,7 +814,7 @@ fi
 log "${tty_blue}get flos core going!${tty_reset}"
 
 execute mkdir -p ~/.lando/plugins/@lando
-execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}-compose"
+execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}"
 if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
   execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
 fi
@@ -842,6 +842,11 @@ execute "${LANDO}" shellenv --add "${LANDO_DEBUG-}"
 
 # TODO: print better messages for different situations eg ensure setup
 log "${tty_green}success!${tty_reset} ${tty_bold}lando${tty_reset} is now installed!"
+
+cat <<EOF >> ~/.lando/config.yml
+orchestratorSeparator: '-'
+homeMount: false
+EOF
 
 # FIN!
 exit 0
