@@ -74,9 +74,15 @@ set -u
 # Allow `[[ -n "$(command)" ]]`, `func "$(command)"`, pipes, etc.
 # shellcheck disable=SC2312
 
-# configuration things at the top for QOL
+# DEFAULT VERSION
 LANDO_DEFAULT_MV="3"
+
+# CONFIG
+LANDO_BINDIR="$HOME/.lando/bin"
+LANDO_DATADIR="${XDG_DATA_HOME:-$HOME/.data}/lando"
+LANDO_SYSDIR="/usr/local/bin"
 LANDO_TMPDIR=${TMPDIR:-/tmp}
+
 MACOS_OLDEST_SUPPORTED="12.0"
 REQUIRED_CURL_VERSION="7.41.0"
 SEMVER_REGEX='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
@@ -161,15 +167,19 @@ get_installer_os
 # see https://github.blog/changelog/2022-05-24-github-actions-re-run-jobs-with-debug-logging/
 
 # @TODO: no-sudo option
-# @TODO: dest
+# @TODO: dest based on lmv
 ARCH="${LANDO_INSTALLER_ARCH:-"$INSTALLER_ARCH"}"
 DEBUG="${LANDO_INSTALLER_DEBUG:-${RUNNER_DEBUG:-}}"
-DEST="${LANDO_INSTALLER_DEST:-/usr/local/bin}"
+DEST="${LANDO_INSTALLER_DEST:-$HOME/.lando/bin}"
 FAT="${LANDO_INSTALLER_FAT:-0}"
 OS="${LANDO_INSTALLER_OS:-"$INSTALLER_OS"}"
-SUDO="${LANDO_INSTALLER_SUDO:-1}"
 SETUP="${LANDO_INSTALLER_SETUP:-1}"
+SYMLINKER="${LANDO_BINDIR}/lando"
+SYSLINK="${LANDO_INSTALLER_SYSLINK:-auto}"
+SYSLINKER="${LANDO_SYSDIR}/lando"
 VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.22}}"
+
+# preserve originals OPTZ
 ORIGOPTS="$*"
 
 usage() {
@@ -179,12 +189,13 @@ Usage: ${tty_dim}[NONINTERACTIVE=1] [CI=1]${tty_reset} ${tty_bold}setup-lando.sh
 ${tty_green}Options:${tty_reset}
   --arch           installs for this arch ${tty_dim}[default: ${ARCH}]${tty_reset}
   --dest           installs in this directory ${tty_dim}[default: ${DEST}]${tty_reset}
-  --fat            installs fat cli ${tty_dim}3.21+ <4 only, not recommended${tty_reset}
-  --no-setup       installs without running lando setup ${tty_dim}3.21+ <4 only${tty_reset}
+  --fat            installs fat binary ${tty_dim}<3.24 only, not recommended${tty_reset}
+  --no-setup       installs without running lando setup ${tty_dim}<3.24 only${tty_reset}
   --os             installs for this os ${tty_dim}[default: ${OS}]${tty_reset}
+  --syslink        installs symlink in /usr/local/bin ${tty_dim}[default: ${SYSLINK}]${tty_reset}
   --version        installs this version ${tty_dim}[default: ${VERSION}]${tty_reset}
   --debug          shows debug messages
-  -h, --help       displays this message
+  -h, --help       displays this help message
   -y, --yes        runs with all defaults and no prompts, sets NONINTERACTIVE=1
 
 ${tty_green}Environment Variables:${tty_reset}
@@ -230,6 +241,14 @@ while [[ $# -gt 0 ]]; do
       SETUP="0"
       shift
       ;;
+    --syslink)
+      SYSLINK="1"
+      shift
+      ;;
+    --syslink=*)
+      SYSLINK="${1#*=}"
+      shift
+      ;;
     --os)
       OS="$2"
       shift 2
@@ -267,7 +286,6 @@ fi
 if [[ "$DEBUG" == "1" ]]; then
   LANDO_DEBUG="--debug"
 fi;
-
 
 # redefine this one
 abort() {
@@ -335,6 +353,7 @@ debug raw DEST="$DEST"
 debug raw FAT="$FAT"
 debug raw OS="$OS"
 debug raw SETUP="$SETUP"
+debug raw SYSLINK="$SYSLINK"
 debug raw USER="$USER"
 debug raw VERSION="$VERSION"
 
@@ -360,11 +379,6 @@ find_tool() {
   done < <(which -a "$1")
 }
 
-# shellcheck disable=SC2317
-exists_but_not_writable() {
-  [[ -e "$1" ]] && ! [[ -r "$1" && -w "$1" && -x "$1" ]]
-}
-
 find_first_existing_parent() {
   dir="$1"
 
@@ -376,11 +390,30 @@ find_first_existing_parent() {
 }
 
 have_sudo_access() {
+  local GROUPS_CMD
+  local -a SUDO=("/usr/bin/sudo")
+
+  GROUPS_CMD="$(which groups)"
+
   if [[ ! -x "/usr/bin/sudo" ]]; then
     return 1
   fi
 
-  local -a SUDO=("/usr/bin/sudo")
+  if [[ -x "$GROUPS_CMD" ]]; then
+    if "$GROUPS_CMD" | grep -q sudo; then
+      HAVE_SUDO_ACCESS="0"
+    fi
+    if "$GROUPS_CMD" | grep -q admin; then
+      HAVE_SUDO_ACCESS="0"
+    fi
+    if "$GROUPS_CMD" | grep -q adm; then
+      HAVE_SUDO_ACCESS="0"
+    fi
+    if "$GROUPS_CMD" | grep -q wheel; then
+      HAVE_SUDO_ACCESS="0"
+    fi
+  fi
+
   if [[ -n "${SUDO_ASKPASS-}" ]]; then
     SUDO+=("-A")
   fi
@@ -388,11 +421,12 @@ have_sudo_access() {
   if [[ -z "${HAVE_SUDO_ACCESS-}" ]]; then
     "${SUDO[@]}" -l -U "${USER}" &>/dev/null
     HAVE_SUDO_ACCESS="$?"
-    if [[ "${HAVE_SUDO_ACCESS}" == 1 ]]; then
-      debug "${USER} does not appear to have sudo access!"
-    else
-      debug "${USER} has sudo access"
-    fi
+  fi
+
+  if [[ "${HAVE_SUDO_ACCESS}" == 1 ]]; then
+    debug "${USER} does not appear to have sudo access!"
+  else
+    debug "${USER} has sudo access"
   fi
 
   return "${HAVE_SUDO_ACCESS}"
@@ -499,11 +533,18 @@ elif [[ "${VERSION}" == "3-dev" ]] || [[ "${VERSION}" == "3-latest" ]]; then
   URL="https://files.lando.dev/core/lando-${OS}-${ARCH}-dev"
   VERSION_DEV=1
 
-# CUSTOM
-else
-  if [[ $VERSION != v* ]]; then
-    VERSION="v${VERSION}"
+# CUSTOM VERSION
+elif [[ ! -f "$VERSION" ]] && [[ $VERSION != v* ]]; then
+  VERSION="v${VERSION}"
+
+# PATH VERSION
+elif [[ -f "${VERSION}" ]]; then
+  if [[ "${VERSION}" == /* ]]; then
+    URL=file://$VERSION
+  else
+    URL=file://$(pwd)/$VERSION
   fi
+  VERSION="$($VERSION version)"
 fi
 
 # Set some helper things
@@ -517,36 +558,74 @@ else
   HRV="$VERSION"
 fi
 
-# set url depending on non-dev LMVs
-if [[ $LMV == '3' ]] && [[ -z "${VERSION_DEV-}" ]]; then
-  URL="https://github.com/lando/core/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
-elif [[ $LMV == '4' ]] && [[ -z "${VERSION_DEV-}" ]]; then
-  URL="https://github.com/lando/core-next/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
+# if URL is still not set at this point we assume its a github version download
+if [[ -z "${URL-}" ]]; then
+  if [[ $LMV == '3' ]] && [[ -z "${VERSION_DEV-}" ]]; then
+    URL="https://github.com/lando/core/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
+  elif [[ $LMV == '4' ]] && [[ -z "${VERSION_DEV-}" ]]; then
+    URL="https://github.com/lando/core-next/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
+  fi
 fi
+
+# abort if we have no URL at this point
+if [[ -z "${URL-}" ]]; then
+  abort "could not resolve '${ORIGINAL_VERSION}' to a file or URL!"
+else
+  debug "resolved v${LMV} version '${ORIGINAL_VERSION}' to ${VERSION} (${URL})"
+fi
+
+# fatty slim
+SLIM_SETUPY=$(version_compare "3.23.0" "$SVERSION" && echo '1' || echo '0')
 
 # autoslim all v3 urls by default
-# @TODO: --fat flag to stop this?
-if [[ $LMV == '3' ]] && [[ $FAT != '1' ]]; then
+if [[ $URL != file://* ]] && [[ -z "${VERSION_DEV-}" ]] && [[ $FAT != '1' ]] && [[ $SLIM_SETUPY == '1' ]]; then
   URL="${URL}-slim"
   HRV="$VERSION-slim"
-  debug "autoslimin url for lando 3"
+  debug "autoslimin url for lando 3 to $URL"
 fi
 
-# debug version resolution
-debug "resolved v${LMV} version '${ORIGINAL_VERSION}' to ${VERSION} (${URL})"
-
 # force setup to 0 if lando 4
-if [[ $SETUP == '1' ]] && [[ $LMV == '4' ]]; then
+if [[ $SETUP == '1' ]] && [[ $SLIM_SETUPY == '0' ]]; then
   SETUP=0
-  debug "disabled autosetup --setup=${SETUP}, not needed in v${LMV}"
+  debug "disabled autosetup --setup=${SETUP}, not needed in <3.24"
 fi
 
 # determine existing dir we need to check
 PERM_DIR="$(find_first_existing_parent "$DEST")"
 debug "resolved install destination ${DEST} to a perm check on ${PERM_DIR}"
 
+# we have enough to set LANDO stuff now
+LANDO="${DEST}/lando"
+LANDO_TMPFILE="${LANDO_TMPDIR}/${RANDOM}"
+HIDDEN_LANDO="${LANDO_DATADIR}/${VERSION}/lando"
+
+# resolve syslink=auto
+if [[ "$SYSLINK" == "auto" ]]; then
+  # the default assumption is we dont need it
+  SYSLINK=0
+  # unless there is already a file or symlink there
+  if [[ -f "$SYSLINKER" ]] || [[ -L "$SYSLINKER" ]]; then SYSLINK=1; fi
+  # or we are in CI
+  if [[ -n "${CI-}" ]]; then SYSLINK=1; fi
+
+  # unless the symlink already goes where we need it to
+  if [[ -L "$SYSLINKER" ]] && [[ "$(readlink -f "$SYSLINKER")" == "$LANDO" ]]; then SYSLINK=0; fi
+  if [[ -L "$SYSLINKER" ]] && [[ "$(readlink -f "$SYSLINKER")" == "$HIDDEN_LANDO" ]]; then SYSLINK=0; fi
+
+  # or we cant write to the sysdir
+  if [[ ! -w "$LANDO_SYSDIR" ]] && ! have_sudo_access; then SYSLINK=0; fi
+
+  # log
+  debug "resolved syslink to $SYSLINK"
+fi
+
+# if syslink is not needed then we reset $LANDO_SYSDIR to $LANDO_TMPDIR so needs_sudo effectively ignores it
+if [[ $SYSLINK == '0' ]]; then
+  LANDO_SYSDIR="$LANDO_TMPDIR"
+fi
+
 needs_sudo() {
-  if [[ ! -w "$PERM_DIR" ]] || [[ ! -w "$LANDO_TMPDIR" ]]; then
+  if [[ ! -w "$PERM_DIR" ]] || [[ ! -w "$LANDO_TMPDIR" ]] || [[ ! -w "$LANDO_SYSDIR" ]]; then
     return 0;
   else
     return 1;
@@ -724,6 +803,10 @@ execute_sudo() {
 
 wait_for_user() {
   local c
+
+# Trap to clean up on Ctrl-C or exit
+  trap 'stty sane; tput sgr0; echo; exit 1' SIGINT EXIT
+
   echo
   echo "Press ${tty_bold}RETURN${tty_reset}/${tty_bold}ENTER${tty_reset} to continue or any other key to abort:"
   getc c
@@ -733,18 +816,73 @@ wait_for_user() {
   fi
 }
 
-# determine the exec we need for sudo protected things
-# we add /tmp in here because their are high security environments where /tmp is not universally writable
-if needs_sudo; then
-  debug "auto_exec elevating to sudo"
-  auto_exec() {
-    execute_sudo "$@"
-  }
-else
-  auto_exec() {
-    execute "$@"
-  }
-fi
+# helpers for more itemized sudoing
+auto_link() {
+  local source="$1"
+  local dest="$2"
+  local perm_source
+  local perm_dest
+  perm_source="$(find_first_existing_parent "$source")"
+  perm_dest="$(find_first_existing_parent "$dest")"
+
+  if have_sudo_access && [[ ! -w "$perm_source" ||  ! -w "$perm_dest" ]]; then
+    execute_sudo ln -sf "$source" "$dest"
+  else
+    execute ln -sf "$source" "$dest"
+  fi
+}
+
+auto_mkdirp() {
+  local dir="$1"
+  local perm_dir
+  perm_dir="$(find_first_existing_parent "$dir")"
+
+  if have_sudo_access && [[ ! -w "$perm_dir" ]]; then
+    execute_sudo mkdir -p "$dir"
+  else
+    execute mkdir -p "$dir"
+  fi
+}
+
+auto_mv() {
+  local source="$1"
+  local dest="$2"
+  local perm_source
+  local perm_dest
+  perm_source="$(find_first_existing_parent "$source")"
+  perm_dest="$(find_first_existing_parent "$dest")"
+
+  if have_sudo_access && [[ ! -w "$perm_source" ||  ! -w "$perm_dest" ]]; then
+    execute_sudo mv -f "$source" "$dest"
+  else
+    execute mv -f "$source" "$dest"
+  fi
+}
+
+auto_curl_n_x() {
+  local dest="$1"
+  local url="$2"
+  local perm_dir
+  perm_dir="$(find_first_existing_parent "$dest")"
+
+  if have_sudo_access && [[ ! -w "$perm_dir" ]]; then
+    execute_sudo curl \
+      --fail \
+      --location \
+      --progress-bar \
+      --output "$dest" \
+      "$url"
+    execute_sudo chmod +x "$dest"
+  else
+    execute curl \
+      --fail \
+      --location \
+      --progress-bar \
+      --output "$dest" \
+      "$url"
+    execute chmod +x "$dest"
+  fi
+}
 
 # Invalidate sudo timestamp before exiting (if it wasn't active before).
 if [[ -x /usr/bin/sudo ]] && ! /usr/bin/sudo -n -v 2>/dev/null; then
@@ -763,10 +901,13 @@ if [[ -z "${NONINTERACTIVE-}" ]]; then
   if needs_sudo; then log "- ${tty_green}prompt${tty_reset} for ${tty_bold}sudo${tty_reset} password"; fi
   # download
   log "- ${tty_magenta}download${tty_reset} lando ${tty_bold}${HRV}${tty_reset} to ${tty_bold}${DEST}${tty_reset}"
+  # syslinke
+  if [[ "$SYSLINK" == "1" ]]; then log "- ${tty_magenta}create${tty_reset} ${tty_bold}syslink${tty_reset} in ${tty_bold}${LANDO_SYSDIR}${tty_reset}"; fi
   # setup
   if [[ "$SETUP" == "1" ]]; then log "- ${tty_blue}run${tty_reset} ${tty_bold}lando setup${tty_reset}"; fi
   # shellenv
   log "- ${tty_blue}run${tty_reset} ${tty_bold}lando shellenv --add${tty_reset}"
+
   # block for user
   wait_for_user
 fi
@@ -778,38 +919,42 @@ if needs_sudo; then
 fi
 
 # Create directories if we need to
-if [[ ! -d "$DEST" ]]; then auto_exec mkdir -p "$DEST"; fi
-if [[ ! -d "$LANDO_TMPDIR" ]]; then auto_exec mkdir -p "$LANDO_TMPDIR"; fi
-
-# LANDO
-LANDO="${DEST}/lando"
-LANDO_TMPFILE="${LANDO_TMPDIR}/${RANDOM}"
+if [[ ! -d "$DEST" ]]; then auto_mkdirp "$DEST"; fi
+if [[ ! -d "$LANDO_TMPDIR" ]]; then auto_mkdirp "$LANDO_TMPDIR"; fi
+if [[ ! -d "$LANDO_BINDIR" ]]; then auto_mkdirp "$LANDO_BINDIR"; fi
 
 # download lando
 log "${tty_magenta}downloading${tty_reset} ${tty_bold}${URL}${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
-auto_exec curl \
-  --fail \
-  --location \
-  --progress-bar \
-  --output "$LANDO_TMPFILE" \
-  "$URL"
+auto_curl_n_x "$LANDO_TMPFILE" "$URL"
 
-execute rm -rf ~/.lando/plugins/@lando/core
-execute rm -rf ~/.lando/cache
-execute rm -rf ~/.lando/bin
-
-# make executable and weak "it works" test
-auto_exec chmod +x "${LANDO_TMPFILE}"
+# weak "it works" test
 execute "${LANDO_TMPFILE}" version >/dev/null
 
-# if we get here we should be good to move it to its final destination
+# if dest = symlinker then we need to actually mv 2 LANDO_DATADIR
 # NOTE: we use mv here instead of cp because of https://developer.apple.com/forums/thread/130313
-auto_exec mv -f "${LANDO_TMPFILE}" "${LANDO}"
-
-# if lando 3 then --clear
-if [[ $LMV == '3' ]]; then
-  execute "${LANDO}" --clear >/dev/null
+if [[ "$LANDO" == "$SYMLINKER" ]]; then
+  auto_mkdirp "${LANDO_DATADIR}/${VERSION}"
+  auto_mv "$LANDO_TMPFILE" "$HIDDEN_LANDO"
+  auto_link "$HIDDEN_LANDO" "$SYMLINKER"
+else
+  auto_mv "$LANDO_TMPFILE" "$LANDO"
+  auto_link "$LANDO" "$SYMLINKER"
 fi
+
+# hook up the syslink here
+if [[ "$SYSLINK" == "1" ]]; then
+  auto_link "$SYMLINKER" "$SYSLINKER"
+fi
+
+# if lando 3 then we need to do some other cleanup things
+# @TODO: is there an equivalent on lando 4?
+if [[ $LMV == '3' ]]; then
+  # remove preexisting lando core so this one can also assert primacy
+  execute rm -rf "$HOME/.lando/plugins/@lando/core"
+  # clean
+  execute "${LANDO}" --clear >/dev/null;
+fi
+
 
 log "${tty_blue}get flos core going!${tty_reset}"
 
@@ -825,7 +970,7 @@ fi
 log "${tty_blue}BOOMSHAKALAKA!! Flos core is setup!${tty_reset}"
 
 # test via log
-log "${tty_green}downloaded${tty_reset} @lando/cli ${tty_bold}$("${LANDO}" version --component @lando/cli)${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
+log "${tty_green}downloaded${tty_reset} lando ${tty_bold}$("${LANDO}" version --component @lando/cli)${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
 
 # run correct setup flavor if needed
 if [[ "$SETUP" == "1" ]]; then
@@ -837,15 +982,25 @@ if [[ "$SETUP" == "1" ]]; then
 fi
 
 # shell env
-log "${tty_blue}adding${tty_reset} ${tty_bold}${DEST}${tty_reset} to ${tty_bold}PATH${tty_reset}"
-execute "${LANDO}" shellenv --add "${LANDO_DEBUG-}"
+execute "${LANDO}" shellenv --add "${LANDO_DEBUG-}" > /dev/null
 
-# TODO: print better messages for different situations eg ensure setup
-log "${tty_green}success!${tty_reset} ${tty_bold}lando${tty_reset} is now installed!"
+# sucess message here
+log "${tty_green}success!${tty_reset} ${tty_magenta}lando${tty_reset} is now installed!"
 
-cat <<EOF >> ~/.lando/config.yml
+# if we cannot invoke the correct lando then print shellenv message
+if \
+  ! which lando > /dev/null \
+  || [[ "$(readlink -f "$(which lando)")" != "$LANDO" && "$(readlink -f "$(which lando)")" != "$HIDDEN_LANDO" ]]; then
+  log
+  log "${tty_magenta}Start a new terminal session${tty_reset} or run ${tty_magenta}eval \"\$(${LANDO} shellenv)\"${tty_reset} to use lando"
+fi
+
+cat <<EOF > ~/.lando/config.yml
 orchestratorSeparator: '-'
 homeMount: false
+stats:
+  - report: false
+    url: https://metrics.lando.dev
 EOF
 
 # FIN!
