@@ -177,7 +177,7 @@ SETUP="${LANDO_INSTALLER_SETUP:-1}"
 SYMLINKER="${LANDO_BINDIR}/lando"
 SYSLINK="${LANDO_INSTALLER_SYSLINK:-auto}"
 SYSLINKER="${LANDO_SYSDIR}/lando"
-VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.7}}"
+VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.26}}"
 
 # preserve originals OPTZ
 ORIGOPTS="$*"
@@ -959,7 +959,7 @@ fi
 log "${tty_blue}get flos core going!${tty_reset}"
 
 execute mkdir -p ~/.lando/plugins/@lando
-execute "${LANDO}" plugin-add "@florianpat/lando-core@${VERSION#v}"
+execute "${LANDO}" plugin-add "@florianpat/lando-core@version${VERSION#v}"
 if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
   execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
 fi
