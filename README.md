@@ -19,6 +19,10 @@ Just run `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPa
 This just automates the [setup process](https://docs.lando.dev/guides/offline-dev.html#mac-specific-instructions)
 See [this](https://docs.lando.dev/help/dns-rebind.html) for more information
 
+### You are using colima as your container runtime?
+Just export the following env var before running the setup script:
+`export COLIMA_INSTALL=1`
+
 ## Maintainers
 
 - [florianPat](https://github.com/florianPat), as long as the pull request is not merged ;)
