@@ -963,6 +963,31 @@ execute "${LANDO}" plugin-add "@florianpat/lando-core@version${VERSION#v}"
 if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
   execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
 fi
+
+cat <<EOF > ~/.lando/config.yml
+orchestratorSeparator: '-'
+homeMount: false
+stats:
+  - report: false
+    url: https://metrics.lando.dev
+EOF
+
+if [[ -n "${COLIMA_INSTALL-}" ]]; then
+log "Hey, COLIMA_INSTALL is set, we are configuring lando for the colima runtime! Cool stuff!"
+
+sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
+
+cat <<EOF >> ~/.lando/config.yml
+setup:
+  buildEngine: false
+engineConfig:
+  socketPath: ${HOME}/.colima/default/docker.sock
+  host: 127.0.0.1
+  port: 2376
+EOF
+
+fi
+
 # if lando 3 then --clear
 if [[ $LMV == '3' ]]; then
   execute "${LANDO}" --clear >/dev/null
@@ -994,14 +1019,6 @@ if \
   log
   log "${tty_magenta}Start a new terminal session${tty_reset} or run ${tty_magenta}eval \"\$(${LANDO} shellenv)\"${tty_reset} to use lando"
 fi
-
-cat <<EOF > ~/.lando/config.yml
-orchestratorSeparator: '-'
-homeMount: false
-stats:
-  - report: false
-    url: https://metrics.lando.dev
-EOF
 
 # FIN!
 exit 0
