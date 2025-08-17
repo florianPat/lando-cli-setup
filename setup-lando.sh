@@ -77,11 +77,13 @@ set -u
 # DEFAULT VERSION
 LANDO_DEFAULT_MV="3"
 
+# GET THE LTF right away
+LANDO_TMPFILE="$(mktemp -t lando.XXXXXX)"
+
 # CONFIG
 LANDO_BINDIR="$HOME/.lando/bin"
 LANDO_DATADIR="${XDG_DATA_HOME:-$HOME/.data}/lando"
 LANDO_SYSDIR="/usr/local/bin"
-LANDO_TMPDIR=${TMPDIR:-/tmp}
 
 MACOS_OLDEST_SUPPORTED="12.0"
 REQUIRED_CURL_VERSION="7.41.0"
@@ -133,6 +135,12 @@ tty_reset="$(tty_escape 0)"
 tty_underline="$(tty_escape "4;39")"
 tty_yellow="$(tty_escape 33)"
 
+get_abs_dir() {
+  local file="$1"
+  cd "$(dirname "$file")" || exit 1
+  pwd
+}
+
 get_installer_arch() {
   local arch
   arch="$(/usr/bin/uname -m || /usr/bin/arch || uname -m || arch)"
@@ -175,9 +183,10 @@ FAT="${LANDO_INSTALLER_FAT:-0}"
 OS="${LANDO_INSTALLER_OS:-"$INSTALLER_OS"}"
 SETUP="${LANDO_INSTALLER_SETUP:-1}"
 SYMLINKER="${LANDO_BINDIR}/lando"
-SYSLINK="${LANDO_INSTALLER_SYSLINK:-auto}"
+SYSLINK="${LANDO_INSTALLER_SYSLINK:-1}"
 SYSLINKER="${LANDO_SYSDIR}/lando"
-VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-3.23.26}}"
+LANDO_TMPDIR=$(get_abs_dir "$LANDO_TMPFILE")
+VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-"3.26.3-1florianPat.0"}}"
 
 # preserve originals OPTZ
 ORIGOPTS="$*"
@@ -356,6 +365,8 @@ debug raw SETUP="$SETUP"
 debug raw SYSLINK="$SYSLINK"
 debug raw USER="$USER"
 debug raw VERSION="$VERSION"
+debug raw TMPFILE="$LANDO_TMPFILE"
+debug raw TMPDIR="$LANDO_TMPDIR"
 
 #######################################################################  tool-verification
 
@@ -561,7 +572,7 @@ fi
 # if URL is still not set at this point we assume its a github version download
 if [[ -z "${URL-}" ]]; then
   if [[ $LMV == '3' ]] && [[ -z "${VERSION_DEV-}" ]]; then
-    URL="https://github.com/lando/core/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
+    URL="https://github.com/HDNET/lando-core/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
   elif [[ $LMV == '4' ]] && [[ -z "${VERSION_DEV-}" ]]; then
     URL="https://github.com/lando/core-next/releases/download/${VERSION}/lando-${OS}-${ARCH}-${VERSION}"
   fi
@@ -596,7 +607,6 @@ debug "resolved install destination ${DEST} to a perm check on ${PERM_DIR}"
 
 # we have enough to set LANDO stuff now
 LANDO="${DEST}/lando"
-LANDO_TMPFILE="${LANDO_TMPDIR}/${RANDOM}"
 HIDDEN_LANDO="${LANDO_DATADIR}/${VERSION}/lando"
 
 # resolve syslink=auto
@@ -906,7 +916,7 @@ if [[ -z "${NONINTERACTIVE-}" ]]; then
   # setup
   if [[ "$SETUP" == "1" ]]; then log "- ${tty_blue}run${tty_reset} ${tty_bold}lando setup${tty_reset}"; fi
   # shellenv
-  log "- ${tty_blue}run${tty_reset} ${tty_bold}lando shellenv --add${tty_reset}"
+  # log "- ${tty_blue}run${tty_reset} ${tty_bold}lando shellenv --add${tty_reset}"
 
   # block for user
   wait_for_user
@@ -927,24 +937,40 @@ if [[ ! -d "$LANDO_BINDIR" ]]; then auto_mkdirp "$LANDO_BINDIR"; fi
 log "${tty_magenta}downloading${tty_reset} ${tty_bold}${URL}${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
 auto_curl_n_x "$LANDO_TMPFILE" "$URL"
 
+execute rm -rf "$HOME/.lando/bin"
+execute mkdir -p "$HOME/.lando/bin"
+execute rm -rf "$HOME/.lando/config"
+execute rm -rf "$HOME/.lando/helpers"
+execute rm -rf "$HOME/.lando/init"
+execute rm -rf "$HOME/.lando/logs"
+execute rm -rf "$HOME/.lando/proxy"
+execute rm -rf "$HOME/.lando/v4"
+
 # weak "it works" test
 execute "${LANDO_TMPFILE}" version >/dev/null
 
 # if dest = symlinker then we need to actually mv 2 LANDO_DATADIR
 # NOTE: we use mv here instead of cp because of https://developer.apple.com/forums/thread/130313
-if [[ "$LANDO" == "$SYMLINKER" ]]; then
-  auto_mkdirp "${LANDO_DATADIR}/${VERSION}"
-  auto_mv "$LANDO_TMPFILE" "$HIDDEN_LANDO"
-  auto_link "$HIDDEN_LANDO" "$SYMLINKER"
-else
-  auto_mv "$LANDO_TMPFILE" "$LANDO"
-  auto_link "$LANDO" "$SYMLINKER"
-fi
+#if [[ "$LANDO" == "$SYMLINKER" ]]; then
+#  auto_mkdirp "${LANDO_DATADIR}/${VERSION}"
+#  auto_mv "$LANDO_TMPFILE" "$HIDDEN_LANDO"
+#  auto_link "$HIDDEN_LANDO" "$SYMLINKER"
+#else
+#  auto_mv "$LANDO_TMPFILE" "$LANDO"
+#  auto_link "$LANDO" "$SYMLINKER"
+#fi
+auto_mv "$LANDO_TMPFILE" "$LANDO"
 
 # hook up the syslink here
 if [[ "$SYSLINK" == "1" ]]; then
   auto_link "$SYMLINKER" "$SYSLINKER"
 fi
+
+if [[ -d "~/Library/Caches/@lando" ]]; then rm -rf ~/Library/Caches/@lando; fi
+if [[ -d "~/Library/Caches/lando" ]]; then rm -rf ~/Library/Caches/lando; fi
+if [[ -d "~/.cache/lando" ]]; then rm -rf ~/.cache/lando; fi
+if [[ -d "~/.cache/@lando" ]]; then rm -rf ~/.cache/lando; fi
+
 
 # if lando 3 then we need to do some other cleanup things
 # @TODO: is there an equivalent on lando 4?
@@ -956,17 +982,12 @@ if [[ $LMV == '3' ]]; then
 fi
 
 
-log "${tty_blue}get flos core going!${tty_reset}"
-
-execute mkdir -p ~/.lando/plugins/@lando
-execute "${LANDO}" plugin-add "@florianpat/lando-core@version${VERSION#v}"
-if [[ ! -f ~/.lando/plugins/@lando/core/package.json ]]; then
-  execute mv ~/.lando/plugins/core ~/.lando/plugins/@lando/core
-fi
+log "${tty_blue}get the config going!${tty_reset}"
 
 cat <<EOF > ~/.lando/config.yml
 orchestratorSeparator: '-'
 homeMount: false
+shouldDockerComposifyProjectName: false
 stats:
   - report: false
     url: https://metrics.lando.dev
@@ -988,7 +1009,7 @@ fi
 if [[ $LMV == '3' ]]; then
   execute "${LANDO}" --clear >/dev/null
 fi
-log "${tty_blue}BOOMSHAKALAKA!! Flos core is setup!${tty_reset}"
+log "${tty_blue}BOOMSHAKALAKA!! The config is setup!${tty_reset}"
 
 # test via log
 log "${tty_green}downloaded${tty_reset} lando ${tty_bold}$("${LANDO}" version --component @lando/cli)${tty_reset} to ${tty_bold}${LANDO}${tty_reset}"
@@ -1003,7 +1024,7 @@ if [[ "$SETUP" == "1" ]]; then
 fi
 
 # shell env
-execute "${LANDO}" shellenv --add "${LANDO_DEBUG-}" > /dev/null
+# execute "${LANDO}" shellenv --add "${LANDO_DEBUG-}" > /dev/null
 
 # sucess message here
 log "${tty_green}success!${tty_reset} ${tty_magenta}lando${tty_reset} is now installed!"
@@ -1011,9 +1032,9 @@ log "${tty_green}success!${tty_reset} ${tty_magenta}lando${tty_reset} is now ins
 # if we cannot invoke the correct lando then print shellenv message
 if \
   ! which lando > /dev/null \
-  || [[ "$(readlink -f "$(which lando)")" != "$LANDO" && "$(readlink -f "$(which lando)")" != "$HIDDEN_LANDO" ]]; then
+  || [[ "$(readlink -f "$(which lando)")" != "$LANDO" ]]; then
   log
-  log "${tty_magenta}Start a new terminal session${tty_reset} or run ${tty_magenta}eval \"\$(${LANDO} shellenv)\"${tty_reset} to use lando"
+  log "${tty_magenta}Lando is not in the path!!${tty_reset}"
 fi
 
 # FIN!
