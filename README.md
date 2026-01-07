@@ -23,6 +23,14 @@ See [this](https://docs.lando.dev/help/dns-rebind.html) for more information
 Just export the following env var before running the setup script:
 `export COLIMA_INSTALL=1`
 
+### You are using lando recipies and need all the plugins?
+
+Just run `lando setup`, it will install the plugins automatically.
+
+### You want to use your 1Password SSH Agent with lando?
+
+Just install the plugin. See instructions [here](https://bitbucket.org/hdnet/1password-docker-ssh-agent/src/main/hdnet-lando-plugin/README.md) please.
+
 ## Maintainers
 
 - [florianPat](https://github.com/florianPat), as long as the pull request is not merged ;)
