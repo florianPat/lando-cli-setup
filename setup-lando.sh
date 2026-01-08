@@ -186,7 +186,7 @@ SYMLINKER="${LANDO_BINDIR}/lando"
 SYSLINK="${LANDO_INSTALLER_SYSLINK:-1}"
 SYSLINKER="${LANDO_SYSDIR}/lando"
 LANDO_TMPDIR=$(get_abs_dir "$LANDO_TMPFILE")
-VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-"3.26.3-1florianPat.2"}}"
+VERSION="${LANDO_VERSION:-${LANDO_INSTALLER_VERSION:-"3.26.3-1florianPat.4"}}"
 
 # preserve originals OPTZ
 ORIGOPTS="$*"
@@ -945,6 +945,7 @@ execute rm -rf "$HOME/.lando/init"
 execute rm -rf "$HOME/.lando/logs"
 execute rm -rf "$HOME/.lando/proxy"
 execute rm -rf "$HOME/.lando/v4"
+execute rm -rf "$HOME/.lando/plugins/@lando/core"
 
 # weak "it works" test
 execute "${LANDO_TMPFILE}" version >/dev/null
@@ -975,8 +976,6 @@ if [[ -d "~/.cache/@lando" ]]; then rm -rf ~/.cache/lando; fi
 # if lando 3 then we need to do some other cleanup things
 # @TODO: is there an equivalent on lando 4?
 if [[ $LMV == '3' ]]; then
-  # remove preexisting lando core so this one can also assert primacy
-  execute rm -rf "$HOME/.lando/plugins/@lando/core"
   # clean
   execute "${LANDO}" --clear >/dev/null;
 fi
