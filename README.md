@@ -11,7 +11,8 @@ This currently includes:
 
 ### macOS/linux/wsl2
 
-`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-lando.sh)"`
+1. Install docker desktop if you are on mac (e.g. with `brew install --cask docker-desktop`) or install docker engine if you are on wsl/linux
+2. `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/florianPat/lando-cli-setup/main/setup-lando.sh)"`
 
 ### If the "*.lndo.site" domains do not resolve (e.g. due to fritzbox rebind protection), install dnsmasq:
 

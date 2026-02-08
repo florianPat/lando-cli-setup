@@ -987,6 +987,8 @@ cat <<EOF > ~/.lando/config.yml
 orchestratorSeparator: '-'
 homeMount: false
 shouldDockerComposifyProjectName: false
+setup:
+  buildEngine: false
 stats:
   - report: false
     url: https://metrics.lando.dev
@@ -996,11 +998,6 @@ if [[ -n "${COLIMA_INSTALL-}" ]]; then
 log "Hey, COLIMA_INSTALL is set, we are configuring lando for the colima runtime! Cool stuff!"
 
 sudo ln -sf $HOME/.colima/default/docker.sock /var/run/docker.sock
-
-cat <<EOF >> ~/.lando/config.yml
-setup:
-  buildEngine: false
-EOF
 
 fi
 
